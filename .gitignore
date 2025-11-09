@@ -22,3 +22,9 @@ dist
 .env
 .env.*
 !.env.example
+node_modules
+.next
+out
+dist
+.env*
+.DS_Store
