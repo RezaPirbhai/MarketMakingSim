@@ -4,24 +4,23 @@ services:
     name: marketmakingsim-server
     runtime: node
     region: oregon
-    plan: starter
-    buildCommand: cd server && npm install
-    startCommand: cd server && npm start
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
-    healthCheckPath: /
 
   # Frontend - Next.js Client
   - type: web
     name: marketmakingsim-client
     runtime: node
     region: oregon
-    plan: starter
-    buildCommand: cd client && npm install && npm run build
-    startCommand: cd client && npm start
+    plan: free
+    rootDir: client
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
