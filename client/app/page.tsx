@@ -287,9 +287,9 @@ export default function Home() {
         // ✅ Snap mid to nearest valid tick multiple
         const mid = Math.round(rawMid / t) * t;
   
-        // Only initialize once per symbol
+        // Only initialize once per symbol - increased from 200 to 1000 ticks
         if (!copy[mk.symbol]) {
-          copy[mk.symbol] = { min: mid - 200 * t, max: mid + 200 * t };
+          copy[mk.symbol] = { min: mid - 1000 * t, max: mid + 1000 * t };
         }
       }
       return copy;
@@ -316,20 +316,20 @@ export default function Home() {
     const el = scrollers.current[symbol];
     if (!el) return;
     const threshold = 120; // px
-    // near top: extend up (higher prices)
+    // near top: extend up (higher prices) - increased from 200 to 500 ticks
     if (el.scrollTop < threshold) {
       setLadderWin((prev) => {
         const w = prev[symbol];
         if (!w) return prev;
-        return { ...prev, [symbol]: { min: w.min, max: w.max + 200 * tick } };
+        return { ...prev, [symbol]: { min: w.min, max: w.max + 500 * tick } };
       });
     }
-    // near bottom: extend down (lower prices)
+    // near bottom: extend down (lower prices) - increased from 200 to 500 ticks
     if (el.scrollHeight - el.clientHeight - el.scrollTop < threshold) {
       setLadderWin((prev) => {
         const w = prev[symbol];
         if (!w) return prev;
-        return { ...prev, [symbol]: { min: w.min - 200 * tick, max: w.max } };
+        return { ...prev, [symbol]: { min: w.min - 500 * tick, max: w.max } };
       });
     }
   };
@@ -350,8 +350,8 @@ export default function Home() {
             : mk.bestBid ?? mk.bestAsk ?? t * 100;
   
         const mid = Math.round(rawMid / t) * t;
-  
-        setLadderWin(prevWin => ({ ...prevWin, [symbol]: { min: mid - 200 * t, max: mid + 200 * t } }));
+
+        setLadderWin(prevWin => ({ ...prevWin, [symbol]: { min: mid - 1000 * t, max: mid + 1000 * t } }));
         setTimeout(() => {
           const el = scrollers.current[symbol];
           if (el) el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
@@ -673,9 +673,9 @@ export default function Home() {
               ? (mk.bestBid + mk.bestAsk) / 2
               : mk.bestBid ?? mk.bestAsk ?? t * 100;
 
-          // ensure window exists
+          // ensure window exists - increased from 200 to 1000 ticks
           const midSnap = Math.round(mid / t) * t;
-          const win = ladderWin[mk.symbol] ?? { min: midSnap - 200 * t, max: midSnap + 200 * t };
+          const win = ladderWin[mk.symbol] ?? { min: midSnap - 1000 * t, max: midSnap + 1000 * t };
 
           // collect book into price->sizes map for quick lookup
           const map: Record<number, { bid: number; myBid: number; ask: number; myAsk: number }> = {};
@@ -888,6 +888,19 @@ export default function Home() {
                 posLimit={mk.posLimit}
                 tick={t}
                 onSubmit={(side, price, qty) => placeOrder(mk.symbol, side, price, qty, t, mk.posLimit)}
+                onJumpToPrice={(price) => {
+                  // Expand window to include the target price
+                  setLadderWin((prev) => {
+                    const currentWin = prev[mk.symbol] || { min: price - 1000 * t, max: price + 1000 * t };
+                    return {
+                      ...prev,
+                      [mk.symbol]: {
+                        min: Math.min(currentWin.min, price - 500 * t),
+                        max: Math.max(currentWin.max, price + 500 * t)
+                      }
+                    };
+                  });
+                }}
               />
             </div>
           );
@@ -999,11 +1012,13 @@ function Ticket({
   tick,
   posLimit,
   onSubmit,
+  onJumpToPrice,
 }: {
   symbol: string;
   tick: number;
   posLimit: number;
   onSubmit: (side: "buy" | "sell", price: number, qty: number) => void;
+  onJumpToPrice?: (price: number) => void;
 }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [price, setPrice] = useState<string>("");
@@ -1016,6 +1031,8 @@ function Ticket({
     if (!isTickAligned(p, tick)) return alert(`Price must be in multiples of ${tick}.`);
     setPrice(p.toFixed(2));
     setJumpPrice("");
+    // Expand the window to show this price
+    if (onJumpToPrice) onJumpToPrice(p);
   };
 
   return (
