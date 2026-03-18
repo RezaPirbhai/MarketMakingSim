@@ -805,7 +805,12 @@ export default function Home() {
                 }}
                 
                 onScroll={() => {
-                  if (!centerLock[mk.symbol]) onScroll(mk.symbol, t);
+                  // Always allow scroll extension
+                  onScroll(mk.symbol, t);
+                  // Disable center lock when user manually scrolls
+                  if (centerLock[mk.symbol]) {
+                    setCenterLock((prev) => ({ ...prev, [mk.symbol]: false }));
+                  }
                 }}
                 className="overflow-y-auto max-h-[48vh]"
                 style={{ scrollBehavior: "auto" }}
@@ -889,17 +894,27 @@ export default function Home() {
                 tick={t}
                 onSubmit={(side, price, qty) => placeOrder(mk.symbol, side, price, qty, t, mk.posLimit)}
                 onJumpToPrice={(price) => {
-                  // Expand window to include the target price
+                  // Center window around the target price
                   setLadderWin((prev) => {
-                    const currentWin = prev[mk.symbol] || { min: price - 1000 * t, max: price + 1000 * t };
                     return {
                       ...prev,
                       [mk.symbol]: {
-                        min: Math.min(currentWin.min, price - 500 * t),
-                        max: Math.max(currentWin.max, price + 500 * t)
+                        min: price - 50 * t,
+                        max: price + 50 * t
                       }
                     };
                   });
+
+                  // Disable center lock so window doesn't auto-reset
+                  setCenterLock((prev) => ({ ...prev, [mk.symbol]: false }));
+
+                  // Scroll to center after a brief delay
+                  setTimeout(() => {
+                    const el = scrollers.current[mk.symbol];
+                    if (el) {
+                      el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+                    }
+                  }, 50);
                 }}
               />
             </div>
