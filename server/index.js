@@ -36,6 +36,19 @@ const MAX_MARKETS = 5;
 
 const room = (code) => `game-${code}`;
 
+// Broadcast throttling to reduce lag with many users
+const pendingFanouts = new Set(); // Set of codes with pending fanout
+const FANOUT_INTERVAL = 100; // Batch fanouts every 100ms
+
+setInterval(() => {
+  if (pendingFanouts.size === 0) return;
+  const codes = [...pendingFanouts];
+  pendingFanouts.clear();
+  for (const code of codes) {
+    fanoutNow(code);
+  }
+}, FANOUT_INTERVAL);
+
 function impliedPx(mk) {
   if (mk.settlement != null) return mk.settlement;
   const mid = mk.book.mid();
@@ -158,7 +171,13 @@ function sendPersonalBundle(socket, code) {
   socket.emit("pnl_implied", { total });
 }
 
+// Queue a fanout (throttled)
 function fanout(code) {
+  pendingFanouts.add(code);
+}
+
+// Immediate fanout (used by throttle interval)
+function fanoutNow(code) {
   const g = games.get(code); if (!g) return;
   const r = io.sockets.adapter.rooms.get(room(code));
   if (!r) return;

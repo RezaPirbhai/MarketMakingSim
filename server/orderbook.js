@@ -115,7 +115,7 @@ class OrderBook {
     return null;
   }
 
-  snapshotFor(userId, depth = 200) {
+  snapshotFor(userId, depth = 1000) {
     const sideSnap = (map, desc) => {
       const prices = [...map.keys()].sort((a,b)=> desc ? b-a : a-b).slice(0, depth);
       return prices.map(p => {
