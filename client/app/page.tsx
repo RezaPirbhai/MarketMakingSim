@@ -113,7 +113,35 @@ export default function Home() {
     const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
     const s = io(serverUrl, { transports: ["websocket"] });
     setSocket(s);
-    s.on("connect", () => setConnected(true));
+    s.on("connect", () => {
+      setConnected(true);
+
+      // Auto-restore session from localStorage on connect/reconnect
+      try {
+        const saved = localStorage.getItem('marketMakingSession');
+        if (saved) {
+          const session = JSON.parse(saved);
+          if (session.isAdmin && session.code && session.adminPw) {
+            // Restore admin session
+            console.log('Restoring admin session:', session.code);
+            s.emit("admin_create_game", {
+              code: session.code,
+              adminPassword: session.adminPw,
+              markets: []
+            });
+          } else if (!session.isAdmin && session.code && session.username) {
+            // Restore player session
+            console.log('Restoring player session:', session.username);
+            s.emit("player_join", {
+              code: session.code,
+              name: session.username
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to restore session:', e);
+      }
+    });
     s.on("disconnect", () => setConnected(false));
 
     s.on("admin_ack", (res: any) => {
@@ -122,6 +150,13 @@ export default function Home() {
       setDisplayName("Admin");
       setMode("game");
       if (res.markets) setMarkets(res.markets);
+
+      // Save admin session to localStorage
+      localStorage.setItem('marketMakingSession', JSON.stringify({
+        isAdmin: true,
+        code: res.code,
+        adminPw: adminPw
+      }));
     });
     s.on("join_ack", (res: any) => {
       if (!res?.ok) return alert(res?.error || "Join failed");
@@ -129,6 +164,13 @@ export default function Home() {
       setDisplayName(res.name || "");
       setMode("game");
       if (res.markets) setMarkets(res.markets);
+
+      // Save player session to localStorage
+      localStorage.setItem('marketMakingSession', JSON.stringify({
+        isAdmin: false,
+        code: code,
+        username: res.name
+      }));
     });
 
     s.on("markets_meta", (p: { markets: MarketMeta[] }) => setMarkets(p.markets || []));
@@ -966,53 +1008,83 @@ function Ticket({
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [price, setPrice] = useState<string>("");
   const [qty, setQty] = useState<string>("");
+  const [jumpPrice, setJumpPrice] = useState<string>("");
+
+  const handleJumpToPrice = () => {
+    const p = Number(jumpPrice);
+    if (!(p > 0)) return alert("Enter a valid price.");
+    if (!isTickAligned(p, tick)) return alert(`Price must be in multiples of ${tick}.`);
+    setPrice(p.toFixed(2));
+    setJumpPrice("");
+  };
 
   return (
-    <div className="mt-3 flex items-center gap-2 flex-wrap">
-      <div className="flex gap-1">
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1">
+          <button
+            className={"px-3 py-1 rounded border " + (side === "buy" ? "bg-green-700 border-green-600" : "border-zinc-700")}
+            onClick={() => setSide("buy")}
+          >
+            B
+          </button>
+          <button
+            className={"px-3 py-1 rounded border " + (side === "sell" ? "bg-red-700 border-red-600" : "border-zinc-700")}
+            onClick={() => setSide("sell")}
+          >
+            S
+          </button>
+        </div>
+        <input
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder={`Price (tick ${tick})`}
+          className="bg-transparent border border-zinc-700 rounded px-2 py-1 w-40"
+          inputMode="decimal"
+        />
+        <input
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          placeholder="Qty"
+          className="bg-transparent border border-zinc-700 rounded px-2 py-1 w-28"
+          inputMode="numeric"
+        />
         <button
-          className={"px-3 py-1 rounded border " + (side === "buy" ? "bg-green-700 border-green-600" : "border-zinc-700")}
-          onClick={() => setSide("buy")}
+          title="Place"
+          className="px-3 py-1 rounded bg-blue-600"
+          onClick={() => {
+            const p = Number(price);
+            const q = Math.floor(Number(qty));
+            if (!(p > 0 && q > 0)) return alert("Enter positive price and quantity.");
+            if (!isTickAligned(p, tick)) return alert(`Price must be in multiples of ${tick}.`);
+            onSubmit(side, p, q);
+            setPrice("");
+            setQty("");
+          }}
         >
-          B
+          ✓ Place
         </button>
+        <span className="text-xs text-zinc-500">Pos limit: {posLimit}</span>
+      </div>
+
+      {/* Jump to price feature */}
+      <div className="flex items-center gap-2">
+        <input
+          value={jumpPrice}
+          onChange={(e) => setJumpPrice(e.target.value)}
+          placeholder="Jump to price..."
+          className="bg-transparent border border-zinc-700 rounded px-2 py-1 w-40 text-sm"
+          inputMode="decimal"
+          onKeyDown={(e) => e.key === 'Enter' && handleJumpToPrice()}
+        />
         <button
-          className={"px-3 py-1 rounded border " + (side === "sell" ? "bg-red-700 border-red-600" : "border-zinc-700")}
-          onClick={() => setSide("sell")}
+          title="Set price and scroll to level"
+          className="px-3 py-1 rounded bg-zinc-700 text-sm"
+          onClick={handleJumpToPrice}
         >
-          S
+          → Go
         </button>
       </div>
-      <input
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        placeholder={`Price (tick ${tick})`}
-        className="bg-transparent border border-zinc-700 rounded px-2 py-1 w-40"
-        inputMode="decimal"
-      />
-      <input
-        value={qty}
-        onChange={(e) => setQty(e.target.value)}
-        placeholder="Qty"
-        className="bg-transparent border border-zinc-700 rounded px-2 py-1 w-28"
-        inputMode="numeric"
-      />
-      <button
-        title="Place"
-        className="px-3 py-1 rounded bg-blue-600"
-        onClick={() => {
-          const p = Number(price);
-          const q = Math.floor(Number(qty));
-          if (!(p > 0 && q > 0)) return alert("Enter positive price and quantity.");
-          if (!isTickAligned(p, tick)) return alert(`Price must be in multiples of ${tick}.`);
-          onSubmit(side, p, q);
-          setPrice("");
-          setQty("");
-        }}
-      >
-        ✓ Place
-      </button>
-      <span className="text-xs text-zinc-500">Pos limit: {posLimit}</span>
     </div>
   );
 }
